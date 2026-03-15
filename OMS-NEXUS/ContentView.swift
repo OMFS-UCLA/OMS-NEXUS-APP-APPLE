@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var selectedTab: AppTab = .home
+    @State private var loadedTabs: Set<AppTab> = [.home]
     @State private var homePath: [Route] = []
     @State private var lecturesPath: [Route] = []
     @State private var resourcesPath: [Route] = []
@@ -17,52 +18,78 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            NavigationStack(path: $homePath) {
-                HomeScreen(navigate: navigate)
-                    .navigationDestination(for: Route.self, destination: destinationView)
-            }
+            tabRoot(for: .home)
             .tag(AppTab.home)
             .tabItem {
                 Label("Home", systemImage: "house.fill")
             }
 
-            NavigationStack(path: $lecturesPath) {
-                LecturesScreen(navigate: navigate)
-                    .navigationDestination(for: Route.self, destination: destinationView)
-            }
+            tabRoot(for: .lectures)
             .tag(AppTab.lectures)
             .tabItem {
                 Label("Lectures", systemImage: "text.below.photo.fill")
             }
 
-            NavigationStack(path: $resourcesPath) {
-                ResourcesScreen()
-                    .navigationDestination(for: Route.self, destination: destinationView)
-            }
+            tabRoot(for: .resources)
             .tag(AppTab.resources)
             .tabItem {
                 Label("Resources", systemImage: "rectangle.on.rectangle")
             }
 
-            NavigationStack(path: $communityPath) {
-                CommunityScreen()
-                    .navigationDestination(for: Route.self, destination: destinationView)
-            }
+            tabRoot(for: .community)
             .tag(AppTab.community)
             .tabItem {
                 Label("Community", systemImage: "person.2.fill")
             }
 
-            NavigationStack(path: $accountPath) {
-                AccountScreen(navigate: navigate)
-                    .navigationDestination(for: Route.self, destination: destinationView)
-            }
+            tabRoot(for: .account)
             .tag(AppTab.account)
             .tabItem {
                 Label("Account", systemImage: "person.crop.circle")
             }
         }
         .tint(.blue)
+        .onAppear {
+            loadedTabs.insert(selectedTab)
+        }
+        .onChange(of: selectedTab) { _, newValue in
+            loadedTabs.insert(newValue)
+        }
+    }
+
+    @ViewBuilder
+    private func tabRoot(for tab: AppTab) -> some View {
+        if loadedTabs.contains(tab) {
+            switch tab {
+            case .home:
+                NavigationStack(path: $homePath) {
+                    HomeScreen(navigate: navigate)
+                        .navigationDestination(for: Route.self, destination: destinationView)
+                }
+            case .lectures:
+                NavigationStack(path: $lecturesPath) {
+                    LecturesScreen(navigate: navigate)
+                        .navigationDestination(for: Route.self, destination: destinationView)
+                }
+            case .resources:
+                NavigationStack(path: $resourcesPath) {
+                    ResourcesScreen()
+                        .navigationDestination(for: Route.self, destination: destinationView)
+                }
+            case .community:
+                NavigationStack(path: $communityPath) {
+                    CommunityScreen()
+                        .navigationDestination(for: Route.self, destination: destinationView)
+                }
+            case .account:
+                NavigationStack(path: $accountPath) {
+                    AccountScreen(navigate: navigate)
+                        .navigationDestination(for: Route.self, destination: destinationView)
+                }
+            }
+        } else {
+            Color.clear
+        }
     }
 
     @ViewBuilder
@@ -73,7 +100,7 @@ struct ContentView: View {
         case .module(let module):
             ModuleDetailScreen(module: module, navigate: navigate)
         case .chapter(let module, let chapter, let index):
-            ChapterDetailScreen(module: module, chapter: chapter, chapterIndex: index)
+            ChapterDetailScreen(module: module, chapter: chapter, chapterIndex: index, navigate: navigate)
         case .news:
             NewsScreen()
         case .about:
@@ -901,6 +928,7 @@ private struct ChapterDetailScreen: View {
     let module: LearningModule
     let chapter: Chapter
     let chapterIndex: Int
+    let navigate: (Route) -> Void
 
     private var breadcrumbText: String {
         if let path = chapter.webPath(in: module) {
@@ -914,124 +942,37 @@ private struct ChapterDetailScreen: View {
         module.chapters.filter { $0.id != chapter.id }.prefix(3).map { $0 }
     }
 
+    private var nextChapter: Chapter? {
+        guard chapterIndex < module.chapters.count else { return nil }
+        return module.chapters[chapterIndex]
+    }
+
     private var isPathologyGrowthChapter: Bool {
         module.subtopicSlug == "pathology" &&
         chapter.webPath(in: module) == "/basic-sciences/pathology/growth-adaptations-cellular-injury-and-cell-death"
     }
 
+    private var isPlateletDisordersChapter: Bool {
+        module.subtopicSlug == "hematology-oncology" &&
+        chapter.webPath(in: module) == "/basic-sciences/hematology-oncology/platelet-disorders"
+    }
+
     var body: some View {
         Group {
             if isPathologyGrowthChapter {
-                PathologyGrowthAdaptationsChapterScreen(module: module, chapter: chapter)
+                PathologyGrowthAdaptationsChapterScreen(module: module, chapter: chapter, nextChapter: nextChapter, navigate: navigate)
+            } else if isPlateletDisordersChapter {
+                PlateletDisordersChapterScreen(module: module, chapter: chapter, chapterIndex: chapterIndex, nextChapter: nextChapter, relatedChapters: relatedChapters, navigate: navigate)
             } else {
-                ZStack {
-                    DashboardBackground()
-
-                    ScrollView(showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: 22) {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text(module.category.badgeTitle)
-                                    .font(.caption.bold())
-                                    .foregroundStyle(.white.opacity(0.9))
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 7)
-                                    .background(.white.opacity(0.12), in: Capsule())
-
-                                Text("Chapter \(chapterIndex)")
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundStyle(.cyan)
-
-                                Text(chapter.title)
-                                    .font(.system(size: 32, weight: .bold))
-                                    .foregroundStyle(.white)
-
-                                Text(module.title)
-                                    .font(.system(size: 17, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.78))
-
-                                Text(breadcrumbText)
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(.white.opacity(0.58))
-                            }
-                            .padding(22)
-                            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-
-                            VStack(alignment: .leading, spacing: 14) {
-                                Text("Overview")
-                                    .font(.headline)
-                                    .foregroundStyle(.white)
-
-                                Text(chapter.description)
-                                    .font(.system(size: 18))
-                                    .foregroundStyle(.white.opacity(0.84))
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            .padding(22)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-
-                            if let webPath = chapter.webPath(in: module) {
-                                VStack(alignment: .leading, spacing: 14) {
-                                    Text("OMSHUB Section")
-                                        .font(.headline)
-                                        .foregroundStyle(.white)
-
-                                    Text(webPath)
-                                        .font(.system(size: 17, weight: .medium, design: .monospaced))
-                                        .foregroundStyle(.cyan)
-                                        .textSelection(.enabled)
-                                }
-                                .padding(22)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-                            }
-
-                            VStack(alignment: .leading, spacing: 14) {
-                                Text("Module Context")
-                                    .font(.headline)
-                                    .foregroundStyle(.white)
-
-                                Text(module.subtitle)
-                                    .foregroundStyle(.white.opacity(0.78))
-
-                                HStack {
-                                    StatBlock(label: "LESSONS", value: "\(module.lessons)")
-                                    Spacer()
-                                    StatBlock(label: "PROGRESS", value: "\(Int(module.completion * 100))%")
-                                }
-                            }
-                            .padding(22)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-
-                            if !relatedChapters.isEmpty {
-                                VStack(alignment: .leading, spacing: 14) {
-                                    Text("Related Sections")
-                                        .font(.headline)
-                                        .foregroundStyle(.white)
-
-                                    ForEach(relatedChapters) { related in
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text(related.title)
-                                                .font(.subheadline.weight(.semibold))
-                                                .foregroundStyle(.white)
-                                            if let relatedPath = related.webPath(in: module) {
-                                                Text(relatedPath)
-                                                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                                                    .foregroundStyle(.white.opacity(0.6))
-                                            }
-                                        }
-                                        .padding(.vertical, 4)
-                                    }
-                                }
-                                .padding(22)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-                            }
-                        }
-                        .padding(22)
-                    }
-                }
+                GenericChapterScreen(
+                    module: module,
+                    chapter: chapter,
+                    chapterIndex: chapterIndex,
+                    details: chapterPageDetails(module: module, chapter: chapter, nextChapter: nextChapter),
+                    relatedChapters: relatedChapters,
+                    nextChapter: nextChapter,
+                    navigate: navigate
+                )
             }
         }
         .navigationTitle(chapter.title)
@@ -1041,9 +982,260 @@ private struct ChapterDetailScreen: View {
     }
 }
 
+private struct PlateletDisordersChapterScreen: View {
+    let module: LearningModule
+    let chapter: Chapter
+    let chapterIndex: Int
+    let nextChapter: Chapter?
+    let relatedChapters: [Chapter]
+    let navigate: (Route) -> Void
+
+    private let notebookURL = URL(string: "https://notebooklm.google.com/notebook/43730331-6044-4ce1-8791-0b0dcd280a60")!
+
+    private let objectives = [
+        "Differentiate platelet adhesion, activation, and aggregation with receptor-level precision.",
+        "Compare thrombocytopenia, qualitative platelet dysfunction, and thrombotic microangiopathy using Step-style logic.",
+        "Apply smear findings, ristocetin testing, and aggregometry patterns to board-style diagnosis."
+    ]
+
+    private let mechanismSteps = [
+        "Adhesion begins when GPIb-IX-V binds von Willebrand factor on exposed subendothelium under high shear.",
+        "Activation is amplified by ADP, thromboxane A2, and thrombin, which drive calcium signaling, shape change, and granule release.",
+        "Aggregation is the final common pathway: activated alpha-IIb beta-3 binds fibrinogen and von Willebrand factor to bridge adjacent platelets."
+    ]
+
+    private let laboratoryLogic = [
+        "Isolated mucocutaneous bleeding with normal PT/PTT points toward primary hemostatic failure rather than a coagulation factor disorder.",
+        "Absent ristocetin response suggests von Willebrand disease or Bernard-Soulier syndrome; lack of correction with plasma favors Bernard-Soulier.",
+        "Absent aggregation to ADP, collagen, and epinephrine with preserved ristocetin response strongly supports Glanzmann thrombasthenia.",
+        "Schistocytes plus thrombocytopenia should trigger concern for thrombotic microangiopathy such as TTP rather than isolated ITP.",
+        "Uremic platelet dysfunction can cause bleeding despite a normal platelet count because the defect is qualitative, not quantitative."
+    ]
+
+    private let misconceptions = [
+        "Primary and secondary hemostasis are not separate time blocks; they are mechanistically intertwined and reinforce each other.",
+        "The classic TTP pentad is not required to act. Microangiopathic hemolytic anemia plus thrombocytopenia is enough to suspect TTP urgently.",
+        "High urea alone does not explain uremic bleeding; accumulated toxins, nitric oxide effects, and anemia-driven poor platelet marginalization matter more."
+    ]
+
+    private let takeaways = [
+        "Bernard-Soulier is an adhesion defect with giant platelets and thrombocytopenia.",
+        "Glanzmann thrombasthenia is an aggregation defect with normal platelet count but failed aggregation to most agonists.",
+        "Platelet-rich arterial thrombi are treated with antiplatelet agents; fibrin-rich venous thrombi are treated with anticoagulants.",
+        "Aspirin blocks TXA2 synthesis, P2Y12 antagonists blunt ADP signaling, and alpha-IIb beta-3 inhibitors block the final common aggregation pathway."
+    ]
+
+    private let references = [
+        "Gale AJ. Current Understanding of Hemostasis. Toxicologic Pathology. 2011.",
+        "Koltai K, Kesmarky G, Feher G, Tibold A, Toth K. Platelet Aggregometry Testing: Molecular Mechanisms, Techniques and Clinical Implications. Int J Mol Sci. 2017.",
+        "Scridon A. Platelets and Their Role in Hemostasis and Thrombosis. Int J Mol Sci. 2022.",
+        "Linthorst GE, Avis HJ, Levi M. Uremic Thrombocytopathy Is not about Urea. J Am Soc Nephrol. 2010.",
+        "Hayward CPM, Tasneem S. Diagnosing qualitative platelet disorders beyond Bernard-Soulier and Glanzmann. Hematology Am Soc Hematol Educ Program. 2025."
+    ]
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("LECTURES  ›  BASIC SCIENCES  ›  HEMATOLOGY-ONCOLOGY")
+                        .font(.system(size: 12, weight: .semibold))
+                        .tracking(1.2)
+                        .foregroundStyle(.secondary)
+                    Text("Platelet Disorders")
+                        .font(.system(size: 34, weight: .bold))
+                        .foregroundStyle(Color(red: 0.07, green: 0.11, blue: 0.24))
+                    Text("NotebookLM-generated, mechanism-first review for preclinical learners covering primary hemostasis, platelet dysfunction, thrombocytopenia, and high-yield diagnostic logic.")
+                        .font(.system(size: 20))
+                        .foregroundStyle(Color(red: 0.31, green: 0.38, blue: 0.50))
+                }
+
+                PathologyMetricCard(title: "Progress", trailing: "86% complete") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ChapterProgressBar(value: 0.86)
+                        HStack(spacing: 8) {
+                            Text("28-35 min")
+                            Text("•")
+                            Text("Advanced")
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        ForEach(objectives, id: \.self) { objective in
+                            Text("• \(objective)")
+                                .font(.system(size: 18))
+                                .foregroundStyle(Color(red: 0.28, green: 0.35, blue: 0.47))
+                        }
+                    }
+                }
+
+                PathologyMetricCard(title: "NotebookLM Studio Assets") {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("This chapter uses a NotebookLM report and scientific infographic generated from a curated scholarly subset emphasizing PubMed, PMC, and society-guideline sources.")
+                            .font(.system(size: 19))
+                            .foregroundStyle(Color(red: 0.31, green: 0.38, blue: 0.50))
+
+                        Image("platelet_disorders_infographic")
+                            .resizable()
+                            .scaledToFit()
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                            )
+
+                        Text("Report title: Comprehensive Medical Education Report: Foundational Platelet Physiology and Pathophysiology for Step-Style Examination")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.blue)
+
+                        Link(destination: notebookURL) {
+                            Label("Open NotebookLM Source Notebook", systemImage: "arrow.up.right.square")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(
+                                    LinearGradient(colors: [Color(red: 0.14, green: 0.29, blue: 0.92), Color(red: 0.04, green: 0.63, blue: 0.86)], startPoint: .leading, endPoint: .trailing),
+                                    in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                PathologyArticleCard(title: "Mechanism-First Framework") {
+                    Text("Primary hemostasis is best learned as a receptor-driven sequence rather than a loose list of facts. The NotebookLM report distilled the topic into the three A's of platelet function:")
+                    BulletList(items: mechanismSteps)
+                    Text("Clinically, this explains why platelet disorders classically cause mucocutaneous bleeding, while deeper tissue and joint bleeding point more strongly toward coagulation factor deficiency.")
+                }
+
+                PathologyArticleCard(title: "High-Yield Compare and Contrast") {
+                    PlateletComparisonCard(
+                        title: "Bernard-Soulier vs Glanzmann",
+                        leftTitle: "Bernard-Soulier Syndrome",
+                        leftItems: [
+                            "Adhesion defect due to GPIb-IX-V dysfunction",
+                            "Low platelet count is common",
+                            "Giant platelets on smear",
+                            "Ristocetin response is absent"
+                        ],
+                        rightTitle: "Glanzmann Thrombasthenia",
+                        rightItems: [
+                            "Aggregation defect due to alpha-IIb beta-3 dysfunction",
+                            "Platelet count is usually normal",
+                            "Platelet size is typically normal",
+                            "Ristocetin response is preserved"
+                        ]
+                    )
+
+                    PlateletComparisonCard(
+                        title: "TTP vs DIC",
+                        leftTitle: "TTP",
+                        leftItems: [
+                            "Platelet consumption within microthrombi",
+                            "Normal PT and PTT are typical",
+                            "Think MAHA plus thrombocytopenia",
+                            "Urgent plasma exchange is the key move"
+                        ],
+                        rightTitle: "DIC",
+                        rightItems: [
+                            "Widespread coagulation cascade activation",
+                            "PT and PTT are often prolonged",
+                            "Consumptive coagulopathy with fibrin formation",
+                            "Look for a triggering systemic illness"
+                        ]
+                    )
+                }
+
+                PathologyArticleCard(title: "Laboratory and Diagnostic Logic") {
+                    BulletList(items: laboratoryLogic)
+                }
+
+                PathologyArticleCard(title: "Common Misconceptions") {
+                    BulletList(items: misconceptions)
+                }
+
+                PathologyMetricCard(title: "Quick Check") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("• Which receptor mediates initial platelet tethering at high shear?")
+                            .font(.system(size: 18))
+                            .foregroundStyle(Color(red: 0.28, green: 0.35, blue: 0.47))
+                        Text("• What study pattern separates Bernard-Soulier syndrome from von Willebrand disease?")
+                            .font(.system(size: 18))
+                            .foregroundStyle(Color(red: 0.28, green: 0.35, blue: 0.47))
+                        Text("• Why can a patient with renal failure bleed despite a normal platelet count?")
+                            .font(.system(size: 18))
+                            .foregroundStyle(Color(red: 0.28, green: 0.35, blue: 0.47))
+
+                        if let nextChapter {
+                            Button {
+                                navigate(.chapter(module: module, chapter: nextChapter, index: chapterIndex + 1))
+                            } label: {
+                                Text(nextChapter.title)
+                                    .font(.system(size: 20, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(
+                                        LinearGradient(colors: [Color(red: 0.14, green: 0.29, blue: 0.92), Color(red: 0.04, green: 0.63, blue: 0.86)], startPoint: .leading, endPoint: .trailing),
+                                        in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                PathologyArticleCard(title: "Report-Based Key Takeaways") {
+                    BulletList(items: takeaways)
+                }
+
+                PathologyArticleCard(title: "Selected References") {
+                    BulletList(items: references)
+                }
+
+                if !relatedChapters.isEmpty {
+                    PathologyArticleCard(title: "Related Topics") {
+                        ForEach(relatedChapters) { related in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(related.title)
+                                    .font(.headline)
+                                    .foregroundStyle(Color(red: 0.07, green: 0.11, blue: 0.24))
+                                Text(related.description)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Pearl")
+                        .font(.caption.bold())
+                        .textCase(.uppercase)
+                        .foregroundStyle(Color.cyan)
+                    Text("Anchor platelet questions to the receptor that fails first: GPIb for adhesion, alpha-IIb beta-3 for aggregation, and ADAMTS13 for runaway vWF-driven microthrombi.")
+                        .font(.title3.bold())
+                        .foregroundStyle(Color(red: 0.07, green: 0.11, blue: 0.24))
+                }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    LinearGradient(colors: [Color.cyan.opacity(0.12), Color.blue.opacity(0.10)], startPoint: .leading, endPoint: .trailing),
+                    in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+                )
+            }
+            .padding(20)
+        }
+        .background(
+            LinearGradient(colors: [Color(red: 0.97, green: 0.98, blue: 1.0), Color(red: 0.91, green: 0.94, blue: 0.99)], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+        )
+    }
+}
+
 private struct PathologyGrowthAdaptationsChapterScreen: View {
     let module: LearningModule
     let chapter: Chapter
+    let nextChapter: Chapter?
+    let navigate: (Route) -> Void
 
     private let objectives = [
         "Differentiate reversible from irreversible cell injury.",
@@ -1131,6 +1323,11 @@ private struct PathologyGrowthAdaptationsChapterScreen: View {
                                 LinearGradient(colors: [Color(red: 0.14, green: 0.29, blue: 0.92), Color(red: 0.04, green: 0.63, blue: 0.86)], startPoint: .leading, endPoint: .trailing),
                                 in: RoundedRectangle(cornerRadius: 16, style: .continuous)
                             )
+                            .onTapGesture {
+                                if let nextChapter {
+                                    navigate(.chapter(module: module, chapter: nextChapter, index: 2))
+                                }
+                            }
                     }
                 }
 
@@ -1263,6 +1460,163 @@ private struct PathologyGrowthAdaptationsChapterScreen: View {
     }
 }
 
+private struct GenericChapterScreen: View {
+    let module: LearningModule
+    let chapter: Chapter
+    let chapterIndex: Int
+    let details: ChapterPageDetails
+    let relatedChapters: [Chapter]
+    let nextChapter: Chapter?
+    let navigate: (Route) -> Void
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("LECTURES  ›  BASIC SCIENCES  ›  \(module.title.uppercased())")
+                        .font(.system(size: 12, weight: .semibold))
+                        .tracking(1.2)
+                        .foregroundStyle(.secondary)
+                    Text(chapter.title)
+                        .font(.system(size: 34, weight: .bold))
+                        .foregroundStyle(Color(red: 0.07, green: 0.11, blue: 0.24))
+                    Text(details.pageSubtitle)
+                        .font(.system(size: 20))
+                        .foregroundStyle(Color(red: 0.31, green: 0.38, blue: 0.50))
+                }
+
+                PathologyMetricCard(title: "Progress", trailing: "\(details.progress)% complete") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ChapterProgressBar(value: Double(details.progress) / 100.0)
+                        HStack(spacing: 8) {
+                            Text(details.duration)
+                            Text("•")
+                            Text(details.level)
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        ForEach(details.objectives, id: \.self) { objective in
+                            Text("• \(objective)")
+                                .font(.system(size: 18))
+                                .foregroundStyle(Color(red: 0.28, green: 0.35, blue: 0.47))
+                        }
+                    }
+                }
+
+                PathologyMetricCard(title: "Lecture Focus") {
+                    VStack(alignment: .leading, spacing: 14) {
+                        ChapterProgressBar(value: Double(details.progress) / 100.0)
+                        Text(details.rapidMapTitle)
+                            .font(.title3.bold())
+                            .foregroundStyle(Color(red: 0.07, green: 0.11, blue: 0.24))
+                        Text(details.rapidMapNotes)
+                            .font(.system(size: 19))
+                            .foregroundStyle(Color(red: 0.31, green: 0.38, blue: 0.50))
+                        ForEach(details.tags, id: \.self) { tag in
+                            Text(tag)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                }
+
+                PathologyMetricCard(title: "Resources") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(details.resources, id: \.self) { resource in
+                            Text("☑ \(resource)")
+                                .font(.system(size: 20))
+                                .foregroundStyle(Color(red: 0.28, green: 0.35, blue: 0.47))
+                        }
+                    }
+                }
+
+                PathologyMetricCard(title: "Quick Check") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(details.quickCheck, id: \.self) { question in
+                            Text("• \(question)")
+                                .font(.system(size: 18))
+                                .foregroundStyle(Color(red: 0.28, green: 0.35, blue: 0.47))
+                        }
+
+                        if let nextChapter {
+                            Button {
+                                navigate(.chapter(module: module, chapter: nextChapter, index: chapterIndex + 1))
+                            } label: {
+                                Text(nextChapter.title)
+                                    .font(.system(size: 20, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(
+                                        LinearGradient(colors: [Color(red: 0.14, green: 0.29, blue: 0.92), Color(red: 0.04, green: 0.63, blue: 0.86)], startPoint: .leading, endPoint: .trailing),
+                                        in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                PathologyArticleCard(title: details.textbookOverviewTitle) {
+                    Text(details.textbookOverviewHeading)
+                        .font(.title3.bold())
+                        .foregroundStyle(Color(red: 0.07, green: 0.11, blue: 0.24))
+                    ForEach(details.textbookOverviewPoints) { point in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(point.title)
+                                .font(.headline)
+                                .foregroundStyle(Color(red: 0.07, green: 0.11, blue: 0.24))
+                            Text(point.body)
+                        }
+                    }
+                    Text(details.textbookOverviewNote)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+
+                PathologyArticleCard(title: "Clinical Connection") {
+                    Text(details.clinicalConnection)
+                }
+
+                if !relatedChapters.isEmpty {
+                    PathologyArticleCard(title: "Related Topics") {
+                        ForEach(relatedChapters) { related in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(related.title)
+                                    .font(.headline)
+                                    .foregroundStyle(Color(red: 0.07, green: 0.11, blue: 0.24))
+                                Text(related.description)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Pearl")
+                        .font(.caption.bold())
+                        .textCase(.uppercase)
+                        .foregroundStyle(Color.cyan)
+                    Text(details.pearl)
+                        .font(.title3.bold())
+                        .foregroundStyle(Color(red: 0.07, green: 0.11, blue: 0.24))
+                }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    LinearGradient(colors: [Color.cyan.opacity(0.12), Color.blue.opacity(0.10)], startPoint: .leading, endPoint: .trailing),
+                    in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+                )
+            }
+            .padding(20)
+        }
+        .background(
+            LinearGradient(colors: [Color(red: 0.97, green: 0.98, blue: 1.0), Color(red: 0.91, green: 0.94, blue: 0.99)], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+        )
+    }
+}
+
 private struct PathologyMetricCard<Content: View>: View {
     let title: String
     var trailing: String? = nil
@@ -1373,6 +1727,259 @@ private struct ComparisonRow: View {
         .background(Color(red: 0.96, green: 0.97, blue: 1.0), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
+
+private struct PlateletComparisonCard: View {
+    let title: String
+    let leftTitle: String
+    let leftItems: [String]
+    let rightTitle: String
+    let rightItems: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(Color(red: 0.07, green: 0.11, blue: 0.24))
+
+            HStack(alignment: .top, spacing: 14) {
+                comparisonColumn(title: leftTitle, items: leftItems)
+                comparisonColumn(title: rightTitle, items: rightItems)
+            }
+        }
+    }
+
+    private func comparisonColumn(title: String, items: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.subheadline.bold())
+                .foregroundStyle(.blue)
+            BulletList(items: items)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(red: 0.96, green: 0.97, blue: 1.0), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+private struct ChapterPageDetails {
+    struct OverviewPoint: Identifiable {
+        let id = UUID()
+        let title: String
+        let body: String
+    }
+
+    let duration: String
+    let level: String
+    let tags: [String]
+    let progress: Int
+    let objectives: [String]
+    let pearl: String
+    let rapidMapTitle: String
+    let rapidMapNotes: String
+    let clinicalConnection: String
+    let pageSubtitle: String
+    let resources: [String]
+    let quickCheck: [String]
+    let textbookOverviewTitle: String
+    let textbookOverviewHeading: String
+    let textbookOverviewPoints: [OverviewPoint]
+    let textbookOverviewNote: String
+}
+
+private func chapterPageDetails(module: LearningModule, chapter: Chapter, nextChapter: Chapter?) -> ChapterPageDetails {
+    if let override = chapterPageOverrides[key(for: module, chapter: chapter)] {
+        return override
+    }
+
+    return ChapterPageDetails(
+        duration: "18-25 min",
+        level: "Foundational",
+        tags: [module.title, "Clinical Recall", "Board Prep"],
+        progress: 40,
+        objectives: [
+            "Differentiate the core mechanisms in \(chapter.title.lowercased()).",
+            "Apply high-yield concepts from \(chapter.title.lowercased()) to case-based reasoning.",
+            "Connect foundational science to OMFS clinical decisions."
+        ],
+        pearl: "When you're stuck, anchor your answer to function first, then structure, then pathology.",
+        rapidMapTitle: "\(chapter.title) (rapid map)",
+        rapidMapNotes: chapter.description,
+        clinicalConnection: "Clinical connection: use this framework to structure oral exam reasoning and perioperative planning.",
+        pageSubtitle: "Clinical frameworks and textbook-level review for OMFS-focused study.",
+        resources: ["Express Review PDF", "Resident Note Sheet", "Practice MCQs"],
+        quickCheck: [
+            "Which statement is most accurate for this topic?",
+            "What is the highest-yield concept for exams?",
+            "Which mechanism links this topic to OMFS care?"
+        ],
+        textbookOverviewTitle: "Textbook Overview",
+        textbookOverviewHeading: "Core Concepts in \(chapter.title)",
+        textbookOverviewPoints: [
+            .init(title: "1. Foundational Concepts", body: "Review the core framework for \(chapter.title.lowercased()) and identify the most testable relationships."),
+            .init(title: "2. Mechanisms and Patterns", body: "Connect mechanisms to common exam patterns and bedside interpretation."),
+            .init(title: "3. Clinical Integration", body: "Translate mechanisms into OMFS-relevant clinical decisions and follow-up strategy.")
+        ],
+        textbookOverviewNote: nextChapter?.title ?? "Return to Basic Sciences"
+    )
+}
+
+private func key(for module: LearningModule, chapter: Chapter) -> String {
+    "\(module.subtopicSlug ?? slugifiedSegment(from: module.title))/\(chapter.webSlug ?? slugifiedSegment(from: chapter.title))"
+}
+
+private let chapterPageOverrides: [String: ChapterPageDetails] = [
+    "cell-biology/cell-structure-and-organization": .init(
+        duration: "18-25 min",
+        level: "Foundational",
+        tags: ["Cell Biology", "Anatomy of the Cell", "Boards"],
+        progress: 40,
+        objectives: [
+            "Differentiate major eukaryotic organelles and their core functions.",
+            "Explain how cytoskeletal elements support shape, transport, and motility.",
+            "Connect ECM and junction biology to healing and disease."
+        ],
+        pearl: "When questions feel similar, ask: Which organelle failure best explains the phenotype?",
+        rapidMapTitle: "Organelles (rapid map)",
+        rapidMapNotes: "Membrane systems, nucleus, mitochondria, cytoskeleton, and extracellular matrix at a glance.",
+        clinicalConnection: "Clinical connection: mitochondrial dysfunction and cytoskeletal disruption can directly affect healing and tissue resilience.",
+        pageSubtitle: "Foundational cell biology topics reframed for clinical recall and board preparation.",
+        resources: ["Express: Cell Structure Review", "Resident Flashcards", "Annotated Cell Atlas"],
+        quickCheck: [
+            "Which organelle is primarily responsible for ATP production?",
+            "What cytoskeletal filament is dominant in intracellular transport?",
+            "Which adhesion structure anchors cells to extracellular matrix?"
+        ],
+        textbookOverviewTitle: "Textbook Overview",
+        textbookOverviewHeading: "Core Concepts in Cell Structure & Organization",
+        textbookOverviewPoints: [
+            .init(title: "1. Organelles", body: "Membrane-bound organelles divide labor for protein synthesis, energy generation, trafficking, and degradation."),
+            .init(title: "2. Cytoskeleton", body: "Actin, microtubules, and intermediate filaments organize shape, transport, and movement."),
+            .init(title: "3. Extracellular Matrix", body: "Matrix proteins and adhesion systems coordinate structural support and signaling.")
+        ],
+        textbookOverviewNote: "Use organelle function as the anchor when working backward from disease phenotype."
+    ),
+    "inflammation-healing/chronic-inflammation": .init(
+        duration: "22-30 min",
+        level: "Intermediate",
+        tags: ["Inflammation and Healing", "Pathology", "Board Prep"],
+        progress: 55,
+        objectives: [
+            "Differentiate persistent triggers that sustain chronic inflammation.",
+            "Recognize cellular mediators driving tissue injury and remodeling.",
+            "Connect chronic inflammation mechanisms to OMFS healing outcomes."
+        ],
+        pearl: "Chronic inflammation persists when the trigger is not removed and repair signals become maladaptive.",
+        rapidMapTitle: "Chronic Inflammation (rapid map)",
+        rapidMapNotes: "Persistent stimulus -> macrophage and lymphocyte recruitment -> mediator release -> tissue destruction and fibrosis.",
+        clinicalConnection: "Clinical connection: unresolved inflammation can delay wound closure, increase fibrosis, and worsen postoperative outcomes.",
+        pageSubtitle: "Persistent inflammatory signaling and tissue remodeling patterns relevant to OMFS care.",
+        resources: ["High-Yield Inflammation PDF", "Resident Quick Notes", "Case-Based MCQs"],
+        quickCheck: [
+            "Which cell type most strongly drives chronic inflammatory signaling?",
+            "How does persistent cytokine release affect tissue architecture?",
+            "What clinical findings suggest fibrosis-dominant remodeling?"
+        ],
+        textbookOverviewTitle: "Textbook Overview",
+        textbookOverviewHeading: "Core Concepts in Chronic Inflammation",
+        textbookOverviewPoints: [
+            .init(title: "1. Triggers", body: "Chronic inflammation follows persistent infection, autoimmune signaling, foreign material, or repeated tissue injury."),
+            .init(title: "2. Cellular Response", body: "Macrophages, lymphocytes, and fibroblasts dominate the later-phase tissue response."),
+            .init(title: "3. Remodeling", body: "Ongoing mediator release drives fibrosis, angiogenesis, and architectural distortion.")
+        ],
+        textbookOverviewNote: "Think trigger persistence, immune recruitment, then remodeling."
+    ),
+    "inflammation-healing/mediators-of-inflammation": .init(
+        duration: "20-28 min",
+        level: "Intermediate",
+        tags: ["Inflammation and Healing", "Mediators", "Clinical Recall"],
+        progress: 50,
+        objectives: [
+            "Differentiate key inflammatory mediators and their primary effects.",
+            "Understand how mediator cascades amplify tissue response.",
+            "Apply mediator pathways to OMFS postoperative inflammation patterns.",
+            "Connect mediator signaling to resolution versus chronicity outcomes."
+        ],
+        pearl: "When analyzing inflammation, identify the trigger first, then map the dominant mediators and target cells.",
+        rapidMapTitle: "Mediators of Inflammation (rapid map)",
+        rapidMapNotes: "Trigger -> mediator release (histamine, prostaglandins, cytokines) -> vascular/cellular response -> tissue outcomes.",
+        clinicalConnection: "Clinical connection: mediator profiling helps predict swelling intensity, pain trajectory, and risk of delayed resolution.",
+        pageSubtitle: "Mediator pathways that shape vascular response, pain, fever, and inflammatory drift.",
+        resources: ["Mediator Pathway Cheat Sheet", "Resident Summary Notes", "Clinical Scenarios Pack"],
+        quickCheck: [
+            "Which mediator most rapidly increases vascular permeability?",
+            "How do prostaglandins influence pain and fever signaling?",
+            "Which cytokines are associated with chronic inflammatory drift?"
+        ],
+        textbookOverviewTitle: "Textbook Overview",
+        textbookOverviewHeading: "Core Concepts in Mediators of Inflammation",
+        textbookOverviewPoints: [
+            .init(title: "1. Trigger Recognition", body: "Cells detect infection or injury and rapidly release preformed or newly synthesized mediators."),
+            .init(title: "2. Vascular Effects", body: "Histamine, leukotrienes, and prostaglandins alter tone, permeability, pain, and temperature."),
+            .init(title: "3. Resolution vs Chronicity", body: "Mediator balance determines whether inflammation resolves cleanly or drifts into chronic disease.")
+        ],
+        textbookOverviewNote: "Know the mediator, its source, and its dominant tissue effect."
+    ),
+    "inflammation-healing/impaired-healing": .init(
+        duration: "24-32 min",
+        level: "Clinical",
+        tags: ["Inflammation and Healing", "Healing Risks", "Clinical Recall"],
+        progress: 62,
+        objectives: [
+            "Identify major local and systemic causes of impaired healing.",
+            "Recognize ischemia, infection, and inflammation imbalance patterns.",
+            "Connect delayed healing findings to OMFS treatment planning."
+        ],
+        pearl: "If healing is delayed, evaluate perfusion, bioburden, and host systemic factors first.",
+        rapidMapTitle: "Impaired Healing (rapid map)",
+        rapidMapNotes: "Trigger persistence + poor perfusion + systemic burden -> delayed granulation and remodeling.",
+        clinicalConnection: "Clinical connection: early detection of impaired healing patterns improves timing of debridement, antimicrobial strategy, and follow-up intervals.",
+        pageSubtitle: "Risk factors and clinical patterns that slow wound progression in surgery and pathology.",
+        resources: ["Healing Risk Checklist", "OMFS Wound Protocol", "Delayed-Healing Cases"],
+        quickCheck: [
+            "Which factor most strongly limits oxygen delivery to tissue?",
+            "How does infection alter wound progression phases?",
+            "Which systemic conditions most increase delayed healing risk?"
+        ],
+        textbookOverviewTitle: "Textbook Overview",
+        textbookOverviewHeading: "Core Concepts in Impaired Healing",
+        textbookOverviewPoints: [
+            .init(title: "1. Perfusion", body: "Ischemia and tissue hypoxia blunt fibroblast function, collagen deposition, and bacterial clearance."),
+            .init(title: "2. Infection", body: "Persistent microbial burden prolongs inflammation and blocks progression to maturation."),
+            .init(title: "3. Host Factors", body: "Systemic disease, malnutrition, medications, and tobacco exposure reduce healing reserve.")
+        ],
+        textbookOverviewNote: "Delayed healing is usually multifactorial, not single-cause."
+    ),
+    "inflammation-healing/healing-in-omfs": .init(
+        duration: "20-30 min",
+        level: "Clinical Application",
+        tags: ["Inflammation and Healing", "OMFS", "Clinical Integration"],
+        progress: 72,
+        objectives: [
+            "Integrate healing biology into OMFS perioperative planning.",
+            "Recognize early signs of delayed healing and intervention thresholds.",
+            "Apply inflammation-resolution principles to postoperative follow-up."
+        ],
+        pearl: "Professional wound care in OMFS is proactive: identify risk early, optimize local environment, and reassess frequently.",
+        rapidMapTitle: "Healing in OMFS (rapid map)",
+        rapidMapNotes: "Risk stratification -> operative planning -> postoperative surveillance -> targeted intervention -> recovery optimization.",
+        clinicalConnection: "Clinical connection: structured healing pathways reduce complications, improve patient recovery, and support predictable outcomes.",
+        pageSubtitle: "Clinical frameworks for optimizing tissue healing in oral and maxillofacial surgery.",
+        resources: ["OMFS Healing Protocol", "Postoperative Monitoring Checklist", "Complication Escalation Guide"],
+        quickCheck: [
+            "Which postoperative signs suggest healing delay instead of normal inflammation?",
+            "How should perfusion and infection risk modify follow-up timing?",
+            "When is early intervention preferred over watchful waiting?"
+        ],
+        textbookOverviewTitle: "Textbook Overview",
+        textbookOverviewHeading: "Key Phases of Healing in OMFS",
+        textbookOverviewPoints: [
+            .init(title: "1. Stabilization and Perfusion", body: "Immediate postoperative management focuses on hemostasis, perfusion support, and edema control to protect tissue viability and maintain oxygen delivery."),
+            .init(title: "2. Controlled Inflammation", body: "A balanced immune response is essential for debris clearance and infection control; excessive inflammation increases fibrosis risk and delays tissue maturation."),
+            .init(title: "3. Regeneration and Remodeling", body: "Granulation, epithelial recovery, and collagen remodeling require surveillance for dehiscence, ischemia, and persistent infection signals.")
+        ],
+        textbookOverviewNote: "Structured healing pathways improve predictability, reduce complications, and support safer postoperative recovery in OMFS."
+    )
+]
 
 private struct CommunityScreen: View {
     var body: some View {
@@ -1957,10 +2564,11 @@ private enum OMSHubData {
             Chapter(title: "Red Blood Cell Disorders", description: "Microcytic, normocytic, and macrocytic anemias with hemoglobinopathies including sickle cell and thalassemias."),
             Chapter(title: "White Blood Cell Disorders", description: "Leukocytosis/leukopenia, acute/chronic leukemias, Hodgkin and non-Hodgkin lymphoma, and plasma cell disorders.")
         ]),
-        LearningModule(title: "Hematology-Oncology", subtitle: "Blood disorders and oncology principles relevant to OMFS care.", category: .advanced, subtopicSlug: "hematology-oncology", lessons: 11, completion: 0.55, imageName: "logo2", colors: [Color(red: 0.18, green: 0.36, blue: 0.83), Color(red: 0.29, green: 0.65, blue: 0.96)], chapters: [
+        LearningModule(title: "Hematology-Oncology", subtitle: "Blood disorders and oncology principles relevant to OMFS care.", category: .advanced, subtopicSlug: "hematology-oncology", lessons: 12, completion: 0.55, imageName: "logo2", colors: [Color(red: 0.18, green: 0.36, blue: 0.83), Color(red: 0.29, green: 0.65, blue: 0.96)], chapters: [
             Chapter(title: "Hematopoiesis", description: "Bone marrow biology and blood cell line development."),
             Chapter(title: "Anemia Workup", description: "Classification and diagnostic framework for anemia."),
             Chapter(title: "Coagulation", description: "Platelet and clotting pathways in surgical care."),
+            Chapter(title: "Platelet Disorders", description: "Mechanism-first review of thrombocytopenia, qualitative platelet defects, TTP, and platelet testing.", webSlug: "platelet-disorders"),
             Chapter(title: "Leukemias & Lymphomas", description: "Clinical patterns, staging, and therapeutic overview."),
             Chapter(title: "Solid Tumor Biology", description: "Oncogenesis and tumor spread principles."),
             Chapter(title: "Perioperative Oncology", description: "Surgical implications and treatment sequencing.")
